@@ -21,9 +21,8 @@ It's part of [HyprBSD](https://hyprbsd.org).
 
 ## Install
 
-**On HyprBSD**, the launcher (Super+R, Super+Space), the HyprBSD menu and the bar use it when
-it's installed, and the menu's Toggles, Shortcut hints turns it off. HyprBSD's packages don't
-include it yet, so for now build it from source as below.
+**On HyprBSD** it's installed with the desktop. The launcher (Super+R, Super+Space), the
+HyprBSD menu and the bar use it, and the menu's Toggles, Shortcut hints turns it off.
 
 **On FreeBSD, from source:**
 
