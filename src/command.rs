@@ -5,7 +5,7 @@
 const TERMINALS: [&str; 3] = ["foot", "footclient", "xdg-terminal-exec"];
 
 /// The window class of the terminal that those and Terminal=true entries open.
-const TERMINAL_CLASS: &str = "foot";
+pub const TERMINAL_CLASS: &str = "foot";
 
 /// A program and its arguments, and whether a terminal runs it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,8 +49,23 @@ impl Invocation {
         vec![if self.in_terminal { TERMINAL_CLASS.to_owned() } else { self.program.clone() }]
     }
 
+    /// The program's name; None when a terminal runs it.
+    pub fn program(&self) -> Option<&str> {
+        (!self.in_terminal).then_some(self.program.as_str())
+    }
+
     fn new(in_terminal: bool, program: &str, args: &[String]) -> Self {
         Self { in_terminal, program: basename(program).to_owned(), args: args.to_vec() }
+    }
+}
+
+/// The desktop entry ID a `hyprbsd-keyhint start id` or `gtk-launch id`
+/// command starts; None for any other command.
+pub fn launched_entry(command: &str) -> Option<String> {
+    match without_variables(split(command)?).as_slice() {
+        [program, verb, id] if basename(program) == "hyprbsd-keyhint" && verb == "start" => Some(id.clone()),
+        [program, id] if basename(program) == "gtk-launch" => Some(id.clone()),
+        _ => None,
     }
 }
 
@@ -142,6 +157,41 @@ mod tests {
 
     fn exec(text: &str, terminal: bool) -> Invocation {
         Invocation::from_desktop_exec(text, terminal).unwrap()
+    }
+
+    #[test]
+    fn gtk_launch_should_name_the_entry_it_starts() {
+        assert_eq!(launched_entry("gtk-launch org.gimp.GIMP").as_deref(), Some("org.gimp.GIMP"));
+    }
+
+    #[test]
+    fn gtk_launch_s_path_should_still_name_the_entry() {
+        assert_eq!(launched_entry("/usr/local/bin/gtk-launch btop").as_deref(), Some("btop"));
+    }
+
+    #[test]
+    fn gtk_launch_with_files_should_not_name_an_entry() {
+        assert_eq!(launched_entry("gtk-launch gimp a.png"), None);
+    }
+
+    #[test]
+    fn keyhint_s_start_should_name_the_entry_it_starts() {
+        assert_eq!(launched_entry("hyprbsd-keyhint start org.gimp.GIMP").as_deref(), Some("org.gimp.GIMP"));
+    }
+
+    #[test]
+    fn keyhint_s_other_verbs_should_not_name_an_entry() {
+        assert_eq!(launched_entry("hyprbsd-keyhint launch"), None);
+    }
+
+    #[test]
+    fn gtk_launch_after_env_should_still_name_the_entry() {
+        assert_eq!(launched_entry("env GDK_BACKEND=x11 gtk-launch gimp").as_deref(), Some("gimp"));
+    }
+
+    #[test]
+    fn another_command_should_not_name_an_entry() {
+        assert_eq!(launched_entry("gimp"), None);
     }
 
     #[test]

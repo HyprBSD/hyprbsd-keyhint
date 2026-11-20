@@ -26,8 +26,9 @@ Contributions are under the BSD-2-Clause licence, as the rest of hyprbsd-keyhint
 program in a headless sway with two outputs and a bar, its own D-Bus session, a stand-in for
 Hyprland's sockets (`tests/fake-hyprland.py`) and one for wofi. It checks how desktop entries
 start (arguments, terminal, actions, D-Bus activation, `DRI_PRIME`), where the card goes and
-when it closes, and which window is the program's. It needs `sway`, `grim`, `jq`, `python312`
-with `py312-pygobject`, and `dbus`, and touches nothing outside its temporary directory.
+when it closes, which window is the program's and which entry a window is from, and the keys
+dialog, with `wtype` pressing the keys. It needs `sway`, `grim`, `jq`, `wtype`, `python312` with
+`py312-pygobject`, and `dbus`, and touches nothing outside its temporary directory.
 
 What it can't show is Hyprland itself: run a changed build in a real Hyprland session too.
 

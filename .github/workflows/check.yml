@@ -29,5 +29,5 @@ jobs:
           mem: 8192
           copyback: false
           cache-after-prepare: true
-          prepare: pkg install -y git rust pkgconf gtk4 gtk4-layer-shell sway grim jq python312 py312-pygobject dbus
+          prepare: pkg install -y git rust pkgconf gtk4 gtk4-layer-shell sway grim jq wtype python312 py312-pygobject dbus
           run: make check

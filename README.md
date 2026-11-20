@@ -17,6 +17,9 @@ It follows the window if it moves, and goes when the window closes. With no wind
 program's (a menu, a panel), the card shows in the corner of the monitor you were on. It knows
 your own bindings as well as HyprBSD's.
 
+It also gives a program keys of your own: HyprBSD's window menu (Super+Shift+W) asks it which
+program a window is, then shows a dialog for the keys, which refuses keys another binding has.
+
 It's part of [HyprBSD](https://hyprbsd.org).
 
 ## Install
@@ -45,6 +48,15 @@ nothing until your config has that function.
   command, for menus and bars that start it themselves. It prints `ready` once it's watching for
   the program's window, so start the command after that.
 - **`hyprbsd-keyhint hide`** closes the card.
+- **`hyprbsd-keyhint entry address`** prints the ID and name of the desktop entry the window at
+  that Hyprland address is from: the one `launch` or `start` opened it from, else the one its
+  class names. It exits 1 when it can't tell.
+- **`hyprbsd-keyhint bind id`** asks for keys to start desktop entry `id` (Super and a key) and
+  prints them as Hyprland's bind takes them, such as `SUPER + ALT + G`. It exits 1 on Escape or a
+  minute after it opens, 2 when there's no such entry, and 3 when there's no display to show it
+  on. While it's open, every key goes to it, the compositor's own bindings included.
+- **`hyprbsd-keyhint start id`** starts desktop entry `id` with no card, as keys saved from the
+  window menu do, so `entry` knows its window.
 
 No card shows while `~/.config/hyprbsd/keyhint-off` exists.
 

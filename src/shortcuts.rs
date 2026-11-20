@@ -4,10 +4,10 @@ use crate::command::Invocation;
 
 const HEADER: &str = "hyprbsd-shortcuts 1";
 
-const SHIFT: u32 = 1;
-const CTRL: u32 = 4;
-const ALT: u32 = 8;
-const SUPER: u32 = 64;
+pub const SHIFT: u32 = 1;
+pub const CTRL: u32 = 4;
+pub const ALT: u32 = 8;
+pub const SUPER: u32 = 64;
 
 /// A key binding that runs a command.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,9 +58,7 @@ pub fn labels(shortcut: &Shortcut) -> Option<Vec<String>> {
     if shortcut.modmask & !(SUPER | CTRL | ALT | SHIFT) != 0 || key.starts_with("XF86") || key.starts_with("mouse") {
         return None;
     }
-    let modifiers = [(SUPER, "SUPER"), (CTRL, "CTRL"), (ALT, "ALT"), (SHIFT, "SHIFT")];
-    let mut caps: Vec<String> =
-        modifiers.iter().filter(|(bit, _)| shortcut.modmask & bit != 0).map(|(_, name)| (*name).to_owned()).collect();
+    let mut caps = modifiers(shortcut.modmask);
     caps.push(match key.as_str() {
         "Return" => "ENTER".to_owned(),
         _ => key.to_uppercase(),
@@ -68,13 +66,26 @@ pub fn labels(shortcut: &Shortcut) -> Option<Vec<String>> {
     Some(caps)
 }
 
-/// The binding to teach for what was started: one with caps to show and the
-/// same invocation, fewest modifiers first.
-pub fn best<'a>(shortcuts: &'a [Shortcut], started: &Invocation) -> Option<&'a Shortcut> {
+/// The names of the modifiers in a modmask, Super, Ctrl, Alt then Shift.
+pub fn modifiers(modmask: u32) -> Vec<String> {
+    [(SUPER, "SUPER"), (CTRL, "CTRL"), (ALT, "ALT"), (SHIFT, "SHIFT")]
+        .iter()
+        .filter(|(bit, _)| modmask & bit != 0)
+        .map(|(_, name)| (*name).to_owned())
+        .collect()
+}
+
+/// The binding to teach for what was started: one with caps to show whose
+/// command `starts` the same invocation, fewest modifiers first.
+pub fn best<'a>(
+    shortcuts: &'a [Shortcut],
+    started: &Invocation,
+    starts: impl Fn(&str) -> Option<Invocation>,
+) -> Option<&'a Shortcut> {
     shortcuts
         .iter()
         .filter(|shortcut| labels(shortcut).is_some())
-        .filter(|shortcut| Invocation::from_command(&shortcut.command).as_ref() == Some(started))
+        .filter(|shortcut| starts(&shortcut.command).as_ref() == Some(started))
         .min_by(|a, b| (a.modmask.count_ones(), a.modmask, &a.key).cmp(&(b.modmask.count_ones(), b.modmask, &b.key)))
 }
 
@@ -163,41 +174,52 @@ mod tests {
     fn best_should_find_the_binding_that_starts_the_same_program() {
         let all = [shortcut(SUPER, "Return", "foot"), shortcut(SUPER, "W", "firefox")];
         let started = Invocation::from_command("firefox").unwrap();
-        assert_eq!(best(&all, &started), Some(&all[1]));
+        assert_eq!(best(&all, &started, Invocation::from_command), Some(&all[1]));
     }
 
     #[test]
     fn best_should_prefer_fewer_modifiers() {
         let all = [shortcut(SUPER | ALT, "C", "galculator"), shortcut(SUPER, "C", "galculator")];
         let started = Invocation::from_command("galculator").unwrap();
-        assert_eq!(best(&all, &started), Some(&all[1]));
+        assert_eq!(best(&all, &started, Invocation::from_command), Some(&all[1]));
     }
 
     #[test]
     fn best_should_pass_over_keys_it_cant_show() {
         let all = [shortcut(0, "XF86Calculator", "galculator"), shortcut(SUPER | ALT, "C", "galculator")];
         let started = Invocation::from_command("galculator").unwrap();
-        assert_eq!(best(&all, &started), Some(&all[1]));
+        assert_eq!(best(&all, &started, Invocation::from_command), Some(&all[1]));
     }
 
     #[test]
     fn best_should_break_ties_the_same_way_every_time() {
         let all = [shortcut(SUPER, "R", "wofi --show drun"), shortcut(SUPER, "SPACE", "wofi --show drun")];
         let started = Invocation::from_command("wofi --show drun").unwrap();
-        assert_eq!(best(&all, &started), Some(&all[0]));
+        assert_eq!(best(&all, &started, Invocation::from_command), Some(&all[0]));
     }
 
     #[test]
     fn best_should_find_nothing_for_a_program_without_a_binding() {
         let all = [shortcut(SUPER, "Return", "foot")];
         let started = Invocation::from_command("gimp").unwrap();
-        assert_eq!(best(&all, &started), None);
+        assert_eq!(best(&all, &started, Invocation::from_command), None);
+    }
+
+    #[test]
+    fn best_should_match_a_binding_by_what_its_command_starts() {
+        let all = [shortcut(SUPER | ALT, "G", "gtk-launch org.gimp.GIMP")];
+        let started = Invocation::from_command("gimp").unwrap();
+        let starts = |command: &str| match command {
+            "gtk-launch org.gimp.GIMP" => Invocation::from_command("gimp"),
+            _ => Invocation::from_command(command),
+        };
+        assert_eq!(best(&all, &started, starts), Some(&all[0]));
     }
 
     #[test]
     fn best_should_skip_bindings_whose_command_it_cant_read() {
         let all = [shortcut(SUPER, "G", "gimp | tee log")];
         let started = Invocation::from_command("gimp").unwrap();
-        assert_eq!(best(&all, &started), None);
+        assert_eq!(best(&all, &started, Invocation::from_command), None);
     }
 }

@@ -1,5 +1,5 @@
-//! Hyprland's request socket (config errors, hyprbsd_shortcuts(), windows,
-//! monitors) and its event socket.
+//! Hyprland's request socket (config errors, hyprbsd_shortcuts(), bindings,
+//! windows, monitors) and its event socket.
 
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -31,13 +31,23 @@ fn has_errors(reply: &str) -> Option<bool> {
 /// The windows now, with their classes, the one in focus and the focused
 /// monitor's name.
 pub fn baseline() -> Option<(Baseline, Option<String>)> {
-    let before = observe::baseline(&request("j/clients").ok()?, &request("j/activewindow").ok()?)?;
+    let before = observe::baseline(&clients()?, &request("j/activewindow").ok()?)?;
     Some((before, request("j/monitors").ok().and_then(|monitors| place::focused_monitor(&monitors))))
+}
+
+/// The `j/clients` reply.
+pub fn clients() -> Option<String> {
+    request("j/clients").ok()
+}
+
+/// The `j/binds` reply: every binding, with its modifiers, key and description.
+pub fn binds() -> Option<String> {
+    request("j/binds").ok()
 }
 
 /// The `j/clients` and `j/monitors` replies, or None when either request fails.
 pub fn windows_and_monitors() -> Option<(String, String)> {
-    Some((request("j/clients").ok()?, request("j/monitors").ok()?))
+    Some((clients()?, request("j/monitors").ok()?))
 }
 
 /// Hyprland's event socket, read a line at a time.

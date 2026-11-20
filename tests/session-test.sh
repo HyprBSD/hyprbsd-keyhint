@@ -10,10 +10,13 @@
 # right corner of the program's window, on that window's monitor and
 # following it, or in the corner of the launch's monitor when no window of
 # the program's opens in time, and closes by itself or with its window.
+# entry names the desktop entry launch or start opened a window from, else
+# the one the window's class names; bind's dialog takes the keys wtype
+# presses.
 #
 #   tests/session-test.sh hyprbsd-keyhint
 #
-# Needs sway, grim, jq, python3.12 with PyGObject and dbus-run-session.
+# Needs sway, grim, jq, wtype, python3.12 with PyGObject and dbus-run-session.
 #
 # SPDX-License-Identifier: BSD-2-Clause
 
@@ -55,6 +58,7 @@ export HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/run" XDG_DATA_HOME="$tmp/data" XDG
 export HYPRLAND_INSTANCE_SIGNATURE=FAKE PATH="$tmp/bin:$PATH" GSK_RENDERER=cairo GDK_DEBUG=no-portals GTK_A11Y=none
 export RECORD="$tmp/record" FAKE_LOG="$tmp/requests" FAKE_SHORTCUTS="$tmp/shortcuts" FAKE_ERRORS="$tmp/errors"
 export FAKE_CLIENTS="$tmp/clients" FAKE_MONITORS="$tmp/monitors" FAKE_ACTIVE="$tmp/active" FAKE_EVENTS="$tmp/events"
+export FAKE_BINDS="$tmp/binds"
 unset WAYLAND_DISPLAY DISPLAY
 
 # record: each start as one line, its arguments in brackets, then DRI_PRIME.
@@ -65,12 +69,14 @@ printf '#!/bin/sh\nline=terminal\nfor a; do line="$line[$a]"; done\necho "$line"
 	>"$tmp/bin/xdg-terminal-exec"
 printf '#!/bin/sh\n[ -n "${FAKE_PICK:-}" ] || exit 1\necho "$FAKE_PICK"\n' >"$tmp/bin/wofi"
 # window address class x y width height monitor: a program's window as
-# Hyprland reports it, added to the window list, then announced.
+# Hyprland reports it, its process 100, added to the window list, then
+# announced.
 cat >"$tmp/bin/window" <<'SH'
 #!/bin/sh
 echo "window $1" >>"$RECORD"
 jq -c --arg a "0x$1" --arg c "$2" --argjson x "$3" --argjson y "$4" --argjson w "$5" --argjson h "$6" \
-	--argjson m "$7" '. + [{address: $a, class: $c, at: [$x, $y], size: [$w, $h], monitor: $m}]' \
+	--argjson m "$7" \
+	'. + [{address: $a, class: $c, initialClass: $c, at: [$x, $y], size: [$w, $h], monitor: $m, pid: 100}]' \
 	"$FAKE_CLIENTS" >"$FAKE_CLIENTS.new" && mv "$FAKE_CLIENTS.new" "$FAKE_CLIENTS"
 printf 'openwindow>>%s,1,%s,%s\n' "$1" "$2" "$2" >>"$FAKE_EVENTS"
 SH
@@ -139,6 +145,9 @@ python3.12 "$here/fake-hyprland.py" "$hypr" &
 pids="$pids $!"
 printf 'bar {\n  output HEADLESS-2\n  position bottom\n  height 40\n  mode dock\n  status_command while :; do echo .; sleep 60; done\n}\n' \
 	>"$tmp/sway.config"
+# A binding of the compositor's own, Super+O, which the bind dialog's keys
+# mustn't set off.
+printf 'bindsym Mod4+o exec touch %s/sway-bound\n' "$tmp" >>"$tmp/sway.config"
 WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 sway -c "$tmp/sway.config" >"$tmp/sway.log" 2>&1 &
 pids="$pids $!"
 i=0
@@ -483,5 +492,146 @@ sleep 1
 check "the window's monitor not found: the card in the launch's monitor's corner" \
 	"card_shown && ! orange_at 343 204"
 settle
+
+# Which desktop entry a window is from: the one its launch started, as
+# recorded, else the one its class names.
+name=shared1 entry "Shared One" "Exec=window e5 shared 1480 100 800 500 1" "StartupWMClass=shared"
+name=shared2 entry "Shared Two" "Exec=record shared2" "StartupWMClass=shared"
+windows=$XDG_RUNTIME_DIR/hyprbsd-keyhint/windows
+shared1=$(printf 'shared1\tShared One')
+reset
+mkdir -p "$windows"
+: >"$windows/0xdead"
+start env FAKE_PICK="$apps/shared1.desktop" "$bin" launch
+settle
+check "launch: the window its entry opened is recorded" "[ \"\$('$bin' entry 0xe5)\" = '$shared1' ]"
+check "launch: records of windows that are gone are forgotten" "[ ! -e '$windows/0xdead' ]"
+check "launch: no card for an entry no binding starts, recorded or not" "! card_shown"
+printf 'shared1\n999\n' >"$windows/0xe5"
+check "entry: a record from another process at that address is passed over" "! '$bin' entry 0xe5 >/dev/null"
+rm -f "$windows/0xe5"
+check "entry: two entries naming the window's class, nothing recorded: neither" "! '$bin' entry 0xe5 >/dev/null"
+window e6 WIN 300 100 800 500 0
+check "entry: the entry whose ID is the window's class" "[ \"\$('$bin' entry 0xe6)\" = \"\$(printf 'win\tWin')\" ]"
+check "entry: a window not listed: none" "! '$bin' entry 0xf00 >/dev/null"
+
+reset
+rm -rf "$windows"
+window c9 shared 1480 100 800 500 1
+start env FAKE_PICK="$apps/shared2.desktop" "$bin" launch
+printf 'activewindowv2>>c9\n' >>"$FAKE_EVENTS"
+settle
+check "launch: a window of the program's only brought forward isn't recorded" "[ ! -e '$windows/0xc9' ]"
+
+# A launch whose program's existing window gets focus first, then opens a new
+# one, with and without a card.
+name=later entry Later "Exec=sh -c \"sleep 1; window e7 shared 1480 100 800 500 1\"" "StartupWMClass=shared"
+printf '64\tJ\tsh -c "sleep 1; window e7 shared 1480 100 800 500 1"\n' >>"$FAKE_SHORTCUTS"
+for hints in on off; do
+	reset
+	rm -rf "$windows"
+	[ $hints = on ] || : >"$HOME/.config/hyprbsd/keyhint-off"
+	window c9 shared 1480 100 800 500 1
+	env FAKE_PICK="$apps/later.desktop" "$bin" launch >/dev/null &
+	card=$!
+	sleep 0.3
+	printf 'activewindowv2>>c9\n' >>"$FAKE_EVENTS"
+	settle
+	check "launch, hints $hints: focus on an old window, then a new one: the new one is recorded" \
+		"[ \"\$('$bin' entry 0xe7)\" = \"\$(printf 'later\tLater')\" ] && [ ! -e '$windows/0xc9' ]"
+done
+
+# start: the entry a saved key starts, its window recorded, no card.
+reset
+rm -rf "$windows"
+"$bin" start shared1 >/dev/null
+check "start: the entry's window is recorded" "[ \"\$('$bin' entry 0xe5)\" = '$shared1' ]"
+check "start: no card" "! card_shown"
+"$bin" start nosuch 2>/dev/null
+nosuch=$?
+check "start: an entry that doesn't exist" "[ $nosuch -eq 2 ]"
+
+reset
+rm -rf "$windows"
+: >"$HOME/.config/hyprbsd/keyhint-off"
+start env FAKE_PICK="$apps/shared1.desktop" "$bin" launch
+settle
+check "launch with the hints off: the window is still recorded" "[ \"\$('$bin' entry 0xe5)\" = '$shared1' ]"
+
+name=glaunch entry Glaunch "Exec=record glaunch"
+printf '64\tL\tgtk-launch glaunch\n' >>"$FAKE_SHORTCUTS"
+reset
+start env FAKE_PICK="$apps/glaunch.desktop" "$bin" launch
+check "launch: the card for an entry a gtk-launch binding starts" card_shown
+settle
+
+# Whether the dialog's orange border crosses the middle row of either output.
+dialog_up() {
+	for _row in "0,360 1280x1" "1280,540 1920x1"; do
+		grim -g "$_row" -t ppm - | tail -c +15 | od -An -tx1 -v | tr -d ' \n' | grep -q ef6f3c && return 0
+	done
+	return 1
+}
+# bind_with keys ...: hyprbsd-keyhint bind plain, given each argument's keys
+# through wtype in turn once its dialog is up, the last again until it
+# closes; its output in $tmp/bound, its status in $bound, whether the dialog
+# showed in $shown.
+bind_with() {
+	"$bin" bind plain >"$tmp/bound" &
+	_pid=$!
+	_i=0
+	shown=no
+	while [ $_i -lt 50 ]; do
+		dialog_up && shown=yes && break
+		sleep 0.1
+		_i=$((_i + 1))
+	done
+	sleep 0.3
+	for _keys; do
+		# shellcheck disable=SC2086
+		wtype $_keys
+		sleep 0.3
+	done
+	# The last keys again, every half second for up to 5 s, while the dialog
+	# is still up.
+	_i=0
+	while kill -0 $_pid 2>/dev/null && [ $_i -lt 10 ]; do
+		sleep 0.5
+		# shellcheck disable=SC2086
+		kill -0 $_pid 2>/dev/null && wtype $_keys
+		_i=$((_i + 1))
+	done
+	kill $_pid 2>/dev/null
+	wait $_pid
+	bound=$?
+}
+echo '[{"modmask": 64, "submap": "", "key": "P", "keycode": 0, "mouse": false, "description": "Plain things"}]' \
+	>"$FAKE_BINDS"
+reset
+bind_with "-M logo -M alt -k g -m alt -m logo"
+check "bind: its dialog shows in the middle of a monitor" "[ $shown = yes ]"
+check "bind: Super, Alt and G give SUPER + ALT + G" "[ $bound -eq 0 ] && [ \"\$(cat '$tmp/bound')\" = 'SUPER + ALT + G' ]"
+bind_with "-k Escape"
+check "bind: Escape cancels, printing nothing" "[ $bound -eq 1 ] && [ ! -s '$tmp/bound' ]"
+bind_with "-M alt -k g -m alt" "-M logo -k F5 -m logo"
+check "bind: keys without Super are passed over" "[ $bound -eq 0 ] && [ \"\$(cat '$tmp/bound')\" = 'SUPER + F5' ]"
+bind_with "-M logo -k p -m logo" "-M logo -M ctrl -k p -m ctrl -m logo"
+check "bind: keys another binding has are passed over" \
+	"[ $bound -eq 0 ] && [ \"\$(cat '$tmp/bound')\" = 'SUPER + CTRL + P' ]"
+"$bin" bind nosuch >/dev/null 2>&1
+nosuch=$?
+check "bind: an entry that doesn't exist" "[ $nosuch -eq 2 ]"
+rm -f "$tmp/sway-bound"
+wtype -M logo -k o -m logo
+sleep 0.5
+reaches=no
+[ -e "$tmp/sway-bound" ] && reaches=yes
+rm -f "$tmp/sway-bound"
+bind_with "-M logo -k o -m logo"
+check "bind: keys the compositor binds go to the dialog, not the binding (without the dialog: $reaches)" \
+	"[ $reaches = yes ] && [ ! -e '$tmp/sway-bound' ] && [ $bound -eq 0 ] && [ \"\$(cat '$tmp/bound')\" = 'SUPER + O' ]"
+env -u WAYLAND_DISPLAY "$bin" bind plain >/dev/null 2>"$tmp/nodisplay"
+nodisplay=$?
+check "bind: no display: its own status and a message, not a cancel's" "[ $nodisplay -eq 3 ] && [ -s '$tmp/nodisplay' ]"
 
 [ "$failures" -eq 0 ]

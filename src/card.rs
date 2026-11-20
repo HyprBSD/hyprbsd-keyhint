@@ -150,7 +150,7 @@ thread_local! {
 pub fn run(request: Option<&Request>) -> glib::ExitCode {
     let app =
         gtk4::Application::builder().application_id(APP_ID).flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE).build();
-    app.connect_startup(|_| load_style());
+    app.connect_startup(|_| add_style(STYLE));
     app.connect_command_line(|app, line| {
         let args: Vec<String> = line.arguments().iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
         match Request::from_args(&args) {
@@ -194,9 +194,10 @@ fn update(request: &Request) {
     });
 }
 
-fn load_style() {
+/// Adds style sheet `css` to the display the program runs on.
+pub fn add_style(css: &str) {
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(STYLE);
+    provider.load_from_string(css);
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(&display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
     }

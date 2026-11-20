@@ -6,7 +6,8 @@
 #                   from the tag v<version>
 #   make check      rustfmt's check, the tests, clippy, then
 #                   tests/session-test.sh on a release build (needs sway,
-#                   grim, jq, python3.12 with PyGObject and dbus-run-session)
+#                   grim, jq, wtype, python3.12 with PyGObject and
+#                   dbus-run-session)
 #   make deny       cargo-deny: the crates' licences, RustSec's advisories,
 #                   duplicate versions and sources (deny.toml)
 #   make clean      cargo's build output

@@ -60,9 +60,7 @@ impl Watch {
     pub fn on(&self, event: &Event) -> Option<String> {
         let before = &self.baseline;
         match event {
-            Event::Opened { address, class } if !before.classes.contains_key(address) && self.is_program(class) => {
-                Some(address.clone())
-            }
+            Event::Opened { address, class } if self.is_new(address) && self.is_program(class) => Some(address.clone()),
             Event::Focused { address }
                 if before.focused.as_ref() != Some(address)
                     && before.classes.get(address).is_some_and(|class| self.is_program(class)) =>
@@ -77,6 +75,11 @@ impl Watch {
     pub fn already_focused(&self) -> Option<String> {
         let focused = self.baseline.focused.as_ref()?;
         self.baseline.classes.get(focused).is_some_and(|class| self.is_program(class)).then(|| focused.clone())
+    }
+
+    /// Whether the window wasn't there before the launch.
+    pub fn is_new(&self, address: &str) -> bool {
+        !self.baseline.classes.contains_key(address)
     }
 
     fn is_program(&self, class: &str) -> bool {
@@ -105,6 +108,16 @@ mod tests {
 
     fn focused(address: &str) -> Event {
         Event::Focused { address: address.into() }
+    }
+
+    #[test]
+    fn a_window_listed_before_the_launch_should_not_be_new() {
+        assert!(!watch(&["thunar"], before(&[("0x6", "thunar")], None)).is_new("0x6"));
+    }
+
+    #[test]
+    fn a_window_not_listed_before_the_launch_should_be_new() {
+        assert!(watch(&["thunar"], before(&[("0x6", "thunar")], None)).is_new("0x7"));
     }
 
     #[test]

@@ -3,10 +3,10 @@
 # A stand-in for Hyprland's sockets in the directory given. Its request
 # socket answers j/configerrors with the lines of the file $FAKE_ERRORS
 # (none while it's missing), the hyprbsd_shortcuts() repl with the file
-# $FAKE_SHORTCUTS, and j/clients, j/monitors and j/activewindow with the
-# files $FAKE_CLIENTS, $FAKE_MONITORS and $FAKE_ACTIVE; it logs each request
-# to $FAKE_LOG. Its event socket sends each client the lines added to the
-# file $FAKE_EVENTS after it connected.
+# $FAKE_SHORTCUTS, and j/clients, j/monitors, j/activewindow and j/binds
+# with the files $FAKE_CLIENTS, $FAKE_MONITORS, $FAKE_ACTIVE and
+# $FAKE_BINDS; it logs each request to $FAKE_LOG. Its event socket sends
+# each client the lines added to the file $FAKE_EVENTS after it connected.
 #
 #   fake-hyprland.py directory
 #
@@ -21,7 +21,7 @@ import time
 
 REPL = "/repl return hyprbsd_shortcuts and hyprbsd_shortcuts()"
 FILES = {"j/clients": ("FAKE_CLIENTS", "[]"), "j/monitors": ("FAKE_MONITORS", "[]"),
-         "j/activewindow": ("FAKE_ACTIVE", "{}")}
+         "j/activewindow": ("FAKE_ACTIVE", "{}"), "j/binds": ("FAKE_BINDS", "[]")}
 
 
 def read(variable, missing):
